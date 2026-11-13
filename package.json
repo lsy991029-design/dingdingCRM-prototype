@@ -1,0 +1,33 @@
+{
+  "name": "crm-customer-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:offline": "tsc -b && VITE_OFFLINE_BUILD=true vite build --mode offline && node scripts/prepare-offline-html.mjs",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "antd": "^6.3.2",
+    "dayjs": "^1.11.13",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "vite-plugin-singlefile": "^2.3.0"
+  },
+  "devDependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.62.4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
+  }
+}

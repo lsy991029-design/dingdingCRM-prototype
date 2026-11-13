@@ -1,0 +1,10 @@
+node_modules/
+dist/
+offline/
+coverage/
+.playwright-cli/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log

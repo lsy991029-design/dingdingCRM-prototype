@@ -1,0 +1,11 @@
+export { default as CrmIcon } from './Crm';
+export { default as CustomerIcon } from './IconCustomer';
+export { default as AddIcon } from './IconAddLine';
+export { default as CreateCustomerIcon } from './Chuangjiankehu';
+export { default as ExportIcon } from './Daochu';
+export { default as MapIcon } from './Ditu';
+export { default as ListViewIcon } from './Liebiaoshitu';
+export { default as LocateIcon } from './Dingwei';
+export { default as MoreIcon } from './Gengduo1';
+export { default as CollapseIcon } from './Shouqi';
+export { default as FullscreenIcon } from './Suoxiaoquanping';
