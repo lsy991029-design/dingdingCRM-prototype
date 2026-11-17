@@ -30,7 +30,7 @@ describe('CustomerWorkspace', () => {
     render(<CustomerWorkspace />);
     await user.click(screen.getByRole('button', { name: /^导出$/ }));
     expect(await screen.findByText('导出数据')).toBeInTheDocument();
-    expect(screen.getByText('导出范围')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开自定义字段导出' })).toHaveTextContent('自定义字段导出');
     expect(screen.queryByRole('button', { name: '导出选项' })).not.toBeInTheDocument();
   });
 
@@ -41,7 +41,7 @@ describe('CustomerWorkspace', () => {
     expect(screen.queryByText('自定义导出...')).not.toBeInTheDocument();
   });
 
-  it('shows only the simplified export scopes and lets users select custom fields', async () => {
+  it('shows selectable fields and an optional contacts checkbox', async () => {
     const user = userEvent.setup();
     render(<CustomerWorkspace />);
     await user.click(screen.getByRole('button', { name: /^导出$/ }));
@@ -49,24 +49,19 @@ describe('CustomerWorkspace', () => {
     expect(screen.getByText('确定要导出当前范围内的 2000 条企业客户数据吗？')).toBeInTheDocument();
     expect(screen.getByText('每 10,000 条数据将会生成一个 Excel 文档')).toBeInTheDocument();
 
-    const exportScope = screen.getByText('导出范围').closest('section');
-    expect(exportScope).not.toBeNull();
-    expect(within(exportScope as HTMLElement).queryByText('表单数据为必选基础内容')).not.toBeInTheDocument();
-    expect(within(exportScope as HTMLElement).getAllByRole('checkbox').map((checkbox) => checkbox.closest('label')?.textContent?.trim())).toEqual([
-      '表单数据', '附件/图片', '联系人',
-    ]);
-    const formScope = within(exportScope as HTMLElement).getByRole('checkbox', { name: '表单数据' });
-    expect(formScope).toBeChecked();
-    expect(formScope).toBeDisabled();
-    const attachmentsScope = within(exportScope as HTMLElement).getByRole('checkbox', { name: '附件/图片' });
-    expect(attachmentsScope).not.toBeChecked();
+    expect(screen.queryByText('导出范围')).not.toBeInTheDocument();
+    expect(screen.queryByText('表单数据')).not.toBeInTheDocument();
+    expect(screen.queryByText('附件/图片')).not.toBeInTheDocument();
     expect(screen.queryByText('图片导出耗时较长，请耐心等待')).not.toBeInTheDocument();
-    await user.click(attachmentsScope);
-    expect(screen.getByText('图片导出耗时较长，请耐心等待').closest('.ant-alert')).toHaveClass('ant-alert-warning');
-    const contactsScope = within(exportScope as HTMLElement).getByRole('checkbox', { name: '联系人' });
-    expect(contactsScope).not.toBeChecked();
-    await user.click(contactsScope);
-    expect(contactsScope).toBeChecked();
+    expect(screen.queryByText('其他')).not.toBeInTheDocument();
+    const contactsOption = screen.getByRole('checkbox', { name: '导出客户关联的联系人' });
+    expect(contactsOption).not.toBeChecked();
+    const modalFooter = contactsOption.closest('.export-modal-footer');
+    expect(modalFooter).not.toBeNull();
+    expect(within(modalFooter as HTMLElement).getByRole('button', { name: /取\s*消/ })).toBeInTheDocument();
+    expect(within(modalFooter as HTMLElement).getByRole('button', { name: '确认导出' })).toBeInTheDocument();
+    await user.click(contactsOption);
+    expect(contactsOption).toBeChecked();
 
     expect(screen.queryByText('表单关联显示字段')).not.toBeInTheDocument();
     expect(screen.queryByText('审批图片/附件')).not.toBeInTheDocument();
@@ -74,27 +69,29 @@ describe('CustomerWorkspace', () => {
     expect(screen.queryByText('系统字段')).not.toBeInTheDocument();
     expect(screen.queryByText('基础信息')).not.toBeInTheDocument();
     expect(screen.queryByText('自定义字段')).not.toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '全部' })).toBeChecked();
-    await user.click(screen.getByRole('button', { name: '折叠表单字段' }));
-    expect(screen.queryByRole('group', { name: '可选导出字段' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '展开表单字段' }));
-    const availableFields = screen.getByRole('group', { name: '可选导出字段' });
+    expect(screen.getByRole('button', { name: '展开自定义字段导出' })).toHaveTextContent('自定义字段导出');
+    expect(screen.queryByRole('tree', { name: '可选导出字段' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '展开自定义字段导出' }));
+    const availableFields = screen.getByRole('tree', { name: '可选导出字段' });
+    const allFieldsCheckbox = within(availableFields).getByRole('checkbox', { name: '全部' });
+    const idFieldCheckbox = within(availableFields).getByRole('checkbox', { name: '数据 ID' });
+    expect(allFieldsCheckbox).toBeChecked();
+    expect(idFieldCheckbox).toBeDisabled();
+    expect(allFieldsCheckbox.compareDocumentPosition(idFieldCheckbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(availableFields).getByRole('checkbox', { name: '客户名称' })).toBeChecked();
+    await user.click(within(availableFields).getByRole('checkbox', { name: '客户名称' }));
+    expect(within(availableFields).getByRole('checkbox', { name: '全部' })).toBePartiallyChecked();
+    await user.click(within(availableFields).getByRole('checkbox', { name: '全部' }));
+    expect(within(availableFields).getByRole('checkbox', { name: '客户名称' })).toBeChecked();
+    await user.click(within(availableFields).getByRole('checkbox', { name: '全部' }));
+    expect(within(availableFields).getByRole('checkbox', { name: '客户名称' })).not.toBeChecked();
+    expect(within(availableFields).getByRole('checkbox', { name: '数据 ID' })).toBeChecked();
+    await user.click(within(availableFields).getByRole('checkbox', { name: '全部' }));
+    await user.click(screen.getByRole('button', { name: '收起自定义字段导出' }));
+    expect(screen.queryByRole('tree', { name: '可选导出字段' })).not.toBeInTheDocument();
     expect(screen.queryByText('勾选需要导出的字段')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('搜索字段')).not.toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: '已选字段' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /拖动排序/ })).not.toBeInTheDocument();
-    expect(within(availableFields).getByRole('checkbox', { name: '数据 ID' })).toBeDisabled();
-    expect(within(availableFields).getByRole('checkbox', { name: '客户名称' })).toBeChecked();
-    expect(within(availableFields).getByRole('checkbox', { name: '客户类型' })).toBeChecked();
-    expect(within(availableFields).getByRole('checkbox', { name: '单行输入框' })).toBeChecked();
-    expect(screen.getByText('11/11 项已选择')).toBeInTheDocument();
-
-    await user.click(within(availableFields).getByRole('checkbox', { name: '客户名称' }));
-    expect(within(availableFields).getByRole('checkbox', { name: '客户名称' })).not.toBeChecked();
-    await user.click(screen.getByRole('checkbox', { name: '全部' }));
-    expect(screen.getByText('11/11 项已选择')).toBeInTheDocument();
-    await user.click(screen.getByRole('checkbox', { name: '全部' }));
-    expect(screen.getByText('0/11 项已选择')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '确认导出' }));
     expect(await screen.findByText('正在生成导出文件')).toBeInTheDocument();
   });
