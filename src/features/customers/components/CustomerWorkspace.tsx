@@ -5,7 +5,6 @@ import {
   Alert,
   ConfigProvider,
   Descriptions,
-  Dropdown,
   Drawer,
   Empty,
   Form,
@@ -51,20 +50,23 @@ import {
 type FormTarget = { kind: 'create' } | { kind: 'customer'; customer: Customer } | { kind: 'draft'; customer: Draft };
 type ColumnKey = 'name' | 'stage' | 'owner' | 'collaborators' | 'dueAt' | 'tags' | 'followUps' | 'updatedAt' | 'latest' | 'orders' | 'contracts';
 type CustomerMapState = 'config' | 'loading' | 'ready' | 'error';
-type ExportScope = 'form' | 'relatedDisplay' | 'relatedForm' | 'formImages' | 'approvalAttachments';
+type ExportScope = 'form' | 'attachments' | 'contacts';
+type ExportField = { key: string; label: string; locked?: boolean };
 
 const exportScopeLabels: Record<ExportScope, string> = {
-  form: '表单数据', relatedDisplay: '表单关联显示字段', formImages: '表单附件图片', approvalAttachments: '审批图片/附件', relatedForm: '关联表单',
+  form: '表单数据', attachments: '附件/图片', contacts: '联系人',
 };
 
-const exportFieldGroups = [
+const coreExportFieldGroups: { key: string; label: string; fields: ExportField[] }[] = [
   { key: 'system', label: '系统字段', fields: [{ key: 'id', label: '数据 ID', locked: true }, { key: 'name', label: '客户名称' }, { key: 'stage', label: '跟进阶段' }, { key: 'owner', label: '负责人' }, { key: 'createdAt', label: '创建时间' }] },
   { key: 'basic', label: '基础信息', fields: [{ key: 'type', label: '客户类型' }, { key: 'industry', label: '所属行业' }, { key: 'address', label: '客户地址' }, { key: 'source', label: '客户来源' }] },
+];
+const exportFieldGroups: { key: string; label: string; fields: ExportField[] }[] = [
   { key: 'custom', label: '自定义字段', fields: [{ key: 'singleLine', label: '单行输入框' }, { key: 'singleSelect', label: '单选框' }, { key: 'attachment', label: '附件字段' }] },
 ];
-const allExportFields = exportFieldGroups.flatMap((group) => group.fields);
-const exportTableFields = [{ key: 'table1.relatedForm1', label: '关联表单1' }];
-const allSelectableExportFields = [...allExportFields, ...exportTableFields];
+const coreExportFields = coreExportFieldGroups.flatMap((group) => group.fields);
+const allSelectableExportFields = [...coreExportFields.filter((field) => !field.locked), ...exportFieldGroups.flatMap((group) => group.fields)];
+const allExportFields = [...coreExportFields, ...exportFieldGroups.flatMap((group) => group.fields)];
 
 const customerMapPoints: AMapPoint[] = [
   [116.3975, 39.9087], [116.4074, 39.9042], [116.3867, 39.9139], [116.4181, 39.9148], [116.3743, 39.9201],
@@ -178,8 +180,6 @@ export function CustomerWorkspace() {
   const [formTarget, setFormTarget] = useState<FormTarget>();
   const [guideOpen, setGuideOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [defaultExportOpen, setDefaultExportOpen] = useState(false);
-  const [defaultExportImages, setDefaultExportImages] = useState(false);
   const [exportTarget, setExportTarget] = useState<'selected' | 'filtered'>('filtered');
   const [exportRecordCount, setExportRecordCount] = useState(0);
 
@@ -200,20 +200,9 @@ export function CustomerWorkspace() {
     setExportRecordCount(currentTarget === 'selected' ? selectedCustomerIds.length : filteredCustomers.length);
     return currentTarget;
   };
-  const openDefaultExport = (target?: 'selected' | 'filtered') => {
-    getExportTarget(target);
-    setDefaultExportImages(false);
-    setDefaultExportOpen(true);
-  };
   const openCustomExport = (target?: 'selected' | 'filtered') => {
     getExportTarget(target);
     setExportOpen(true);
-  };
-  const exportMenuItems = [
-    { key: 'custom', label: <div className="export-menu-option"><strong>自定义导出...</strong><span>调整导出范围与字段</span></div> },
-  ];
-  const handleExportMenuClick = ({ key }: { key: string }) => {
-    if (key === 'custom') openCustomExport();
   };
 
   const saveCustomer = (values: CustomerFormValues, target: FormTarget) => {
@@ -299,7 +288,7 @@ export function CustomerWorkspace() {
           </section>}
           <section className="crm-surface customer-list-card">
             <div className="list-heading"><span>共 <b>{filteredCustomers.length}</b> 条数据</span></div>
-            <div className="list-actions"><Button type="primary" icon={<CreateCustomerIcon size={18} />} onClick={openCreate}>新建客户</Button><div className="export-split-button"><Button className="export-main-button" aria-label="导出" onClick={() => openDefaultExport()} disabled={!filteredCustomers.length}>导出</Button><Dropdown placement="bottomRight" trigger={['click']} styles={{ root: { width: 'max-content', maxWidth: 'calc(100vw - 32px)' }, item: { paddingInline: 20 } }} menu={{ items: exportMenuItems, onClick: handleExportMenuClick, style: { width: 'max-content', minWidth: 0 } }} disabled={!filteredCustomers.length}><Button className="export-split-trigger" aria-label="导出选项" disabled={!filteredCustomers.length}><span aria-hidden="true">⌄</span></Button></Dropdown></div><Button onClick={() => message.info('导入功能仅作原型演示')}>导入</Button><div className="toolbar-spacer" /><Segmented value={viewMode} options={[{ label: '列表', value: '列表' }, { label: '地图', value: '地图', icon: <MapIcon size={16} /> }]} onChange={(value) => setViewMode(value as '列表' | '地图')} /><Segmented value={density} options={['标准', '密集']} onChange={(value) => setDensity(value as '标准' | '密集')} /><Button onClick={() => { setColumnDraft(visibleColumns); setColumnModalOpen(true); }}>自定义列</Button></div>
+            <div className="list-actions"><Button type="primary" icon={<CreateCustomerIcon size={18} />} onClick={openCreate}>新建客户</Button><Button className="export-main-button" aria-label="导出" onClick={() => openCustomExport()} disabled={!filteredCustomers.length}>导出</Button><Button onClick={() => message.info('导入功能仅作原型演示')}>导入</Button><div className="toolbar-spacer" /><Segmented value={viewMode} options={[{ label: '列表', value: '列表' }, { label: '地图', value: '地图', icon: <MapIcon size={16} /> }]} onChange={(value) => setViewMode(value as '列表' | '地图')} /><Segmented value={density} options={['标准', '密集']} onChange={(value) => setDensity(value as '标准' | '密集')} /><Button onClick={() => { setColumnDraft(visibleColumns); setColumnModalOpen(true); }}>自定义列</Button></div>
             {viewMode === '列表' ? <CustomerTable customers={filteredCustomers} density={density} visibleColumns={visibleColumns} selectedRowKeys={selectedCustomerIds} onSelectionChange={setSelectedCustomerIds} onOpen={openDetail} onFollowUp={openDetail} /> : <CustomerMapView customers={filteredCustomers} onOpen={openDetail} />}
           </section>
         </>
@@ -308,7 +297,6 @@ export function CustomerWorkspace() {
       )}
 
       <ColumnSettingsModal open={columnModalOpen} values={columnDraft} onChange={setColumnDraft} onClose={() => setColumnModalOpen(false)} onConfirm={() => { setVisibleColumns(columnDraft); setColumnModalOpen(false); message.success('列配置已保存'); }} />
-      <DefaultExportConfirmModal open={defaultExportOpen} target={exportTarget} count={exportRecordCount} includeImages={defaultExportImages} onIncludeImagesChange={setDefaultExportImages} onClose={() => setDefaultExportOpen(false)} onConfirm={() => { setDefaultExportOpen(false); message.success(defaultExportImages ? '已创建包含图片的默认导出任务' : '已创建默认导出任务'); }} />
       <ExportDataModal open={exportOpen} target={exportTarget} selectedCount={exportRecordCount} filteredCount={exportRecordCount} onClose={() => setExportOpen(false)} />
       <CustomerFormDrawer target={formTarget} onClose={() => setFormTarget(undefined)} onSaveCustomer={saveCustomer} onSaveDraft={saveDraft} onSaved={() => setFormTarget(undefined)} />
       <CustomerDetailDrawer customer={selected} onClose={() => setSelected(undefined)} onEdit={openEdit} onFollowUp={addFollowUp} />
@@ -411,25 +399,9 @@ function CustomerMapView({ customers, onOpen }: { customers: Customer[]; onOpen:
   </div>;
 }
 
-function DefaultExportConfirmModal({ open, target, count, includeImages, onIncludeImagesChange, onClose, onConfirm }: { open: boolean; target: 'selected' | 'filtered'; count: number; includeImages: boolean; onIncludeImagesChange: (checked: boolean) => void; onClose: () => void; onConfirm: () => void }) {
-  const description = target === 'selected'
-    ? `确定要导出已选中的 ${count} 条企业客户数据吗？`
-    : `确定要导出当前范围内的 ${count} 条企业客户数据吗？`;
-  return <Modal className="default-export-modal" width={520} title="导出企业客户" open={open} onCancel={onClose} footer={<><Button onClick={onClose}>取消</Button><Button type="primary" disabled={!count} onClick={onConfirm}>确认导出</Button></>}>
-    <div className="default-export-confirm-content">
-      <p className="default-export-question">{description}</p>
-      <p className="default-export-note">每 10,000 条数据将会生成一个 Excel 文档</p>
-      <Checkbox checked={includeImages} onChange={(event) => onIncludeImagesChange(event.target.checked)}>同时导出数据中的图片（图片导出耗时较长，请耐心等待）</Checkbox>
-    </div>
-  </Modal>;
-}
-
 function ExportDataModal({ open, target, selectedCount, filteredCount, onClose }: { open: boolean; target: 'selected' | 'filtered'; selectedCount: number; filteredCount: number; onClose: () => void }) {
   const [scopes, setScopes] = useState<ExportScope[]>(['form']);
-  const [fields, setFields] = useState<string[]>(allSelectableExportFields.map((field) => field.key));
-  const [fieldSearch, setFieldSearch] = useState('');
-  const [relatedFormTypes, setRelatedFormTypes] = useState<string[]>(['联系人']);
-  const [tableExpanded, setTableExpanded] = useState(true);
+  const [fields, setFields] = useState<string[]>(allExportFields.map((field) => field.key));
   const [fieldModuleExpanded, setFieldModuleExpanded] = useState(true);
   const [phase, setPhase] = useState<'editing' | 'processing' | 'success' | 'failed'>('editing');
   const [error, setError] = useState('');
@@ -437,7 +409,7 @@ function ExportDataModal({ open, target, selectedCount, filteredCount, onClose }
   const count = target === 'selected' ? selectedCount : filteredCount;
 
   useEffect(() => {
-    if (open) { setPhase('editing'); setError(''); setProgress(12); setScopes(['form']); setFields(allSelectableExportFields.map((field) => field.key)); setFieldSearch(''); setRelatedFormTypes(['联系人']); setTableExpanded(true); setFieldModuleExpanded(true); }
+    if (open) { setPhase('editing'); setError(''); setProgress(12); setScopes(['form']); setFields(allExportFields.map((field) => field.key)); setFieldModuleExpanded(true); }
   }, [open, target]);
   useEffect(() => {
     if (phase !== 'processing') return undefined;
@@ -445,21 +417,18 @@ function ExportDataModal({ open, target, selectedCount, filteredCount, onClose }
     return () => window.clearInterval(timer);
   }, [phase]);
 
-  const tableFieldMatches = !fieldSearch || '表格1'.includes(fieldSearch) || exportTableFields.some((field) => field.label.includes(fieldSearch));
   const allSelected = allSelectableExportFields.every((field) => fields.includes(field.key));
   const toggleField = (key: string, checked: boolean) => setFields((current) => checked ? [...new Set([...current, key])] : current.filter((item) => item !== key));
   const toggleScope = (scope: ExportScope, checked: boolean) => setScopes((current) => checked ? [...new Set([...current, scope])] : current.filter((item) => item !== scope));
-  const toggleTableFields = (checked: boolean) => setFields((current) => checked ? [...new Set([...current, ...exportTableFields.map((field) => field.key)])] : current.filter((key) => !exportTableFields.some((field) => field.key === key)));
   const submit = () => {
     if (!count) { setError('当前范围没有可导出的客户，请调整筛选条件或返回列表勾选客户。'); return; }
-    if (!fields.length) { setError('请至少选择一项表单字段。'); return; }
     setError('');
     setPhase('processing');
     window.setTimeout(() => { setProgress(100); setPhase('success'); }, 1850);
   };
   const download = () => {
-    const orderedFields = allSelectableExportFields.filter((field) => fields.includes(field.key));
-    const payload = `CRM 导出任务演示\n导出对象：${target === 'selected' ? '已选客户' : '当前筛选结果'}\n客户数量：${count}\n表单字段：${orderedFields.map((field) => field.label).join('、')}\n导出范围：${scopes.map((scope) => exportScopeLabels[scope]).join('、')}\n关联表单类型：${relatedFormTypes.join('、')}`;
+    const selectedFields = allExportFields.filter((field) => field.locked || fields.includes(field.key));
+    const payload = `CRM 导出任务演示\n导出对象：${target === 'selected' ? '已选客户' : '当前筛选结果'}\n客户数量：${count}\n表单字段：${selectedFields.map((field) => field.label).join('、')}\n导出范围：${scopes.map((scope) => exportScopeLabels[scope]).join('、')}`;
     const url = URL.createObjectURL(new Blob([payload], { type: 'application/zip' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = `客户导出_${new Date().toISOString().slice(0, 10)}.zip`; anchor.click(); URL.revokeObjectURL(url); message.success('ZIP 文件已开始下载');
   };
@@ -468,19 +437,12 @@ function ExportDataModal({ open, target, selectedCount, filteredCount, onClose }
     {phase === 'processing' ? <div className="export-result-state"><Progress type="circle" percent={progress} size={82} strokeColor="#007FFF" /><h3>正在生成导出文件</h3><p>正在按权限整理 {count} 条客户数据，Excel 与图片将统一打包为 ZIP。</p><Button onClick={onClose}>关闭窗口，后台继续</Button></div> : phase === 'success' ? <div className="export-result-state export-success-state"><div className="export-success-icon">✓</div><h3>导出任务已完成</h3><p>已生成 1 个 ZIP 文件，包含 Excel 与已选择的附件内容。</p><Space><Tag color="green">已完成</Tag><span className="muted-text">任务编号 EXP-{String(Date.now()).slice(-6)}</span></Space></div> : <div className="export-form-body">
       <div className="export-confirm-intro"><p>{target === 'selected' ? `确定要导出已选中的 ${count} 条企业客户数据吗？` : '确定要导出当前范围内的 2000 条企业客户数据吗？'}</p><span>每 10,000 条数据将会生成一个 Excel 文档</span></div>
       {error && <Alert type="error" showIcon message={error} className="export-error-alert" />}
-      <section className="export-section"><div className="export-section-heading"><h3>导出范围</h3></div><div className="export-scope-options" role="group" aria-label="导出范围选项">{(Object.keys(exportScopeLabels) as ExportScope[]).map((scope) => scope === 'relatedForm' ? <div className="export-scope-related-group" role="group" aria-label="关联表单范围" key={scope}><Checkbox className="export-scope-option" checked={scopes.includes(scope)} onChange={(event) => toggleScope(scope, event.target.checked)}>{exportScopeLabels[scope]}</Checkbox>{scopes.includes(scope) && <div className="export-related-form-picker"><span>关联表单类型</span><Checkbox.Group value={relatedFormTypes} onChange={(values) => setRelatedFormTypes(values as string[])} options={[{ label: '联系人', value: '联系人' }, { label: '回款', value: '回款' }, { label: '项目', value: '项目' }]} /></div>}</div> : <Checkbox className="export-scope-option" key={scope} checked={scopes.includes(scope)} disabled={scope === 'form'} onChange={(event) => toggleScope(scope, event.target.checked)}>{exportScopeLabels[scope]}</Checkbox>)}</div>
-        {scopes.includes('relatedDisplay') && <Alert className="export-scope-alert" type="warning" showIcon message="选中表单关联显示，导出文档将无法用于导入更新" />}
+      <section className="export-section"><div className="export-section-heading"><h3>导出范围</h3></div><div className="export-scope-options" role="group" aria-label="导出范围选项">{(Object.keys(exportScopeLabels) as ExportScope[]).map((scope) => <Checkbox className="export-scope-option" key={scope} checked={scopes.includes(scope)} disabled={scope === 'form'} onChange={(event) => toggleScope(scope, event.target.checked)}>{exportScopeLabels[scope]}</Checkbox>)}</div>
+        {scopes.includes('attachments') && <Alert className="export-scope-alert" type="warning" showIcon message="图片导出耗时较长，请耐心等待" />}
       </section>
-      <section className="export-section"><div className="export-section-heading"><h3>表单字段</h3></div><div className={`export-field-module${fieldModuleExpanded ? '' : ' is-collapsed'}`}><div className="export-field-module-toolbar"><button type="button" className="export-module-toggle" aria-label={fieldModuleExpanded ? '折叠表单字段' : '展开表单字段'} aria-expanded={fieldModuleExpanded} onClick={() => setFieldModuleExpanded((value) => !value)}><span className={`export-module-chevron${fieldModuleExpanded ? ' is-down' : ''}`} aria-hidden="true" /></button><Checkbox indeterminate={fields.length > 0 && !allSelected} checked={allSelected} onChange={(event) => setFields(event.target.checked ? allSelectableExportFields.map((field) => field.key) : ['id'])}>全部</Checkbox>{fieldModuleExpanded && <p className="export-field-description">勾选需要导出的字段</p>}<span>{fields.length}/{allSelectableExportFields.length} 项已选择</span></div>{fieldModuleExpanded && <div className="export-field-list" role="group" aria-label="可选导出字段">
-        <div className="export-transfer-tools"><Input size="small" allowClear placeholder="搜索字段" value={fieldSearch} onChange={(event) => setFieldSearch(event.target.value)} /></div>
+      <section className="export-section"><div className="export-section-heading"><h3>表单字段</h3></div><div className={`export-field-module${fieldModuleExpanded ? '' : ' is-collapsed'}`}><div className="export-field-module-toolbar"><button type="button" className="export-module-toggle" aria-label={fieldModuleExpanded ? '折叠表单字段' : '展开表单字段'} aria-expanded={fieldModuleExpanded} onClick={() => setFieldModuleExpanded((value) => !value)}><span className={`export-module-chevron${fieldModuleExpanded ? ' is-down' : ''}`} aria-hidden="true" /></button><Checkbox indeterminate={allSelectableExportFields.some((field) => fields.includes(field.key)) && !allSelected} checked={allSelected} onChange={(event) => setFields(event.target.checked ? allExportFields.map((field) => field.key) : ['id'])}>全部</Checkbox><span>{allSelectableExportFields.filter((field) => fields.includes(field.key)).length}/{allSelectableExportFields.length} 项已选择</span></div>{fieldModuleExpanded && <div className="export-field-list" role="group" aria-label="可选导出字段">
         <div className="export-transfer-list">
-          {exportFieldGroups.map((group) => {
-            const matchingFields = group.fields.filter((field) => !fieldSearch || field.label.includes(fieldSearch));
-            if (!matchingFields.length) return null;
-            return <div className="export-field-group" key={group.key}><div className="export-field-group-heading">{group.label}</div>{matchingFields.map((field) => <div className="export-transfer-option" key={field.key}><Checkbox checked={fields.includes(field.key)} disabled={field.locked} onChange={(event) => toggleField(field.key, event.target.checked)}>{field.label}</Checkbox>{field.locked && <Tag>必选</Tag>}</div>)}</div>;
-          })}
-          {tableFieldMatches && <div className="export-transfer-table"><div className="export-field-group-heading">表格字段</div><div className="export-transfer-option"><button type="button" className="export-tree-toggle" aria-label={tableExpanded ? '收起表格1字段' : '展开表格1字段'} onClick={() => setTableExpanded((value) => !value)}>{tableExpanded ? '⌄' : '›'}</button><Checkbox indeterminate={fields.some((key) => exportTableFields.some((field) => field.key === key)) && !exportTableFields.every((field) => fields.includes(field.key))} checked={exportTableFields.every((field) => fields.includes(field.key))} onChange={(event) => toggleTableFields(event.target.checked)}>表格1</Checkbox></div>{tableExpanded && exportTableFields.filter((field) => !fieldSearch || field.label.includes(fieldSearch) || '表格1'.includes(fieldSearch)).map((field) => <div className="export-transfer-option export-transfer-child" key={field.key}><Checkbox checked={fields.includes(field.key)} onChange={(event) => toggleField(field.key, event.target.checked)}>{field.label}</Checkbox></div>)}</div>}
-          {!exportFieldGroups.some((group) => group.fields.some((field) => !fieldSearch || field.label.includes(fieldSearch))) && !tableFieldMatches && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的字段" />}
+          {allExportFields.map((field) => <div className="export-transfer-option" key={field.key}><Checkbox checked={field.locked || fields.includes(field.key)} disabled={field.locked} onChange={(event) => toggleField(field.key, event.target.checked)}>{field.label}</Checkbox>{field.locked && <Tag>必选</Tag>}</div>)}
         </div>
       </div>}</div>
       </section>

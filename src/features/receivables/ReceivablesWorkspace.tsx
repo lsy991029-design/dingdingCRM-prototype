@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
-  Alert, Button, DatePicker, Drawer, Empty, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography, message,
+  Button, DatePicker, Drawer, Empty, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography, message,
   type TableColumnsType,
 } from 'antd';
-import { CheckOutlined, DeleteOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { BellOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, EyeOutlined, FullscreenOutlined, LeftOutlined, LinkOutlined, PlusOutlined, PrinterOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import './receivables.css';
 
@@ -45,7 +45,9 @@ const money = (value: number) => `¥${value.toLocaleString('zh-CN', { minimumFra
 const getPlanForPeriod = (plans: Plan[], key: string) => plans.find((plan) => plan.installments.some((period) => period.key === key));
 const getPeriod = (plans: Plan[], key: string) => plans.flatMap((plan) => plan.installments).find((period) => period.key === key);
 
-export function ReceivablesWorkspace() {
+type ReceivablesWorkspaceProps = { periodAllocationEnabled?: boolean };
+
+export function ReceivablesWorkspace({ periodAllocationEnabled = true }: ReceivablesWorkspaceProps) {
   const [plans] = useState(plansSeed);
   const [receipts, setReceipts] = useState(receiptsSeed);
   const [activeTab, setActiveTab] = useState('receipts');
@@ -54,6 +56,10 @@ export function ReceivablesWorkspace() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailReceiptKey, setDetailReceiptKey] = useState<string>();
   const [detailPlanKey, setDetailPlanKey] = useState<string>();
+  const [detailAllocationPlanKey, setDetailAllocationPlanKey] = useState<string>();
+  const [detailTab, setDetailTab] = useState('info');
+  const [showAllDetailFields, setShowAllDetailFields] = useState(true);
+  const [detailLayout, setDetailLayout] = useState<'table' | 'list'>('table');
   const [customer, setCustomer] = useState('');
   const [receiptDate, setReceiptDate] = useState(dayjs('2026-11-10'));
   const [receiptType, setReceiptType] = useState('银行转账');
@@ -79,6 +85,30 @@ export function ReceivablesWorkspace() {
   }, { planned: 0, approved: 0, pending: 0 });
   const detailReceipt = receipts.find((receipt) => receipt.key === detailReceiptKey);
   const detailPlan = plans.find((plan) => plan.key === detailPlanKey);
+  const detailAllocationPlan = plans.find((plan) => plan.key === detailAllocationPlanKey);
+  const receiptDetailRows = detailReceipt?.allocations.map((allocation) => {
+    const plan = getPlanForPeriod(plans, allocation.installmentKey);
+    const period = getPeriod(plans, allocation.installmentKey);
+    const order = ordersSeed.find((item) => detailReceipt.orderKeys?.includes(item.key));
+    const contractPlans = plans.filter((item) => item.contract === plan?.contract);
+    const contractOutstanding = contractPlans.reduce((sum, item) => {
+      const totals = totalsForPlan(item);
+      return sum + Math.max(0, totals.planned - totals.approved - totals.pending);
+    }, 0);
+    const orderPaid = order ? receipts.filter((receipt) => receipt.status === '已通过' && receipt.orderKeys?.includes(order.key))
+      .reduce((sum, receipt) => sum + receipt.allocations.reduce((amount, row) => amount + row.amount, 0), 0) : 0;
+    const planTotals = plan ? totalsForPlan(plan) : { planned: 0, approved: 0, pending: 0 };
+    return {
+      key: allocation.installmentKey,
+      contractOutstanding,
+      orderNo: order?.no ?? '',
+      orderOutstanding: order ? Math.max(0, order.total - orderPaid) : undefined,
+      planNo: plan?.no ?? '',
+      planOutstanding: Math.max(0, planTotals.planned - planTotals.approved - planTotals.pending),
+      period: period?.period,
+      amount: allocation.amount,
+    };
+  }) ?? [];
   const allocationModalPlan = plans.find((plan) => plan.key === detailRows.find((row) => row.rowKey === allocationModalRowKey)?.planKey);
   const draftAllocations = Object.entries(manualAllocations)
     .map(([installmentKey, amount]) => ({ installmentKey, amount }))
@@ -238,6 +268,18 @@ export function ReceivablesWorkspace() {
     { title: '未回款', width: 92, render: (_, row) => { const state = amounts[row.key] ?? { approved: 0, pending: 0 }; return money(Math.max(0, row.planned - state.approved - state.pending)); } },
     { title: '本次分摊', width: 150, render: (_, row) => <InputNumber aria-label={`第${row.period}期本次分摊`} min={0} precision={2} value={allocationModalDraft[row.key] ?? 0} onChange={(value) => setAllocationModalDraft((current) => ({ ...current, [row.key]: value ?? 0 }))} /> },
   ];
+  const receiptDetailColumns: TableColumnsType<(typeof receiptDetailRows)[number]> = [
+    { title: '关联合同', children: [{ title: '合同未回金额', width: 180, dataIndex: 'contractOutstanding', render: money }] },
+    { title: '关联订单', children: [
+      { title: '关联订单', width: 190, dataIndex: 'orderNo', render: (value) => value || <span className="receivable-muted">-</span> },
+      { title: '订单未回金额', width: 180, dataIndex: 'orderOutstanding', render: (value) => value === undefined ? <span className="receivable-muted">-</span> : money(value) },
+    ] },
+    { title: '关联回款计划', children: [
+      { title: '回款计划编号', width: 250, render: (_, row) => <div className="receivable-detail-plan-ref"><LinkOutlined /><span>{row.planNo}</span>{periodAllocationEnabled && <Button type="link" size="small" onClick={() => setDetailAllocationPlanKey(getPlanForPeriod(plans, row.key)?.key)}>期次分摊</Button>}</div> },
+      { title: '回款计划未回金额', width: 190, dataIndex: 'planOutstanding', render: money },
+    ] },
+    { title: '回款金额', width: 140, dataIndex: 'amount', render: money },
+  ];
 
   const detailColumns: TableColumnsType<DetailDraft> = [
     { title: '关联订单', children: [
@@ -251,7 +293,7 @@ export function ReceivablesWorkspace() {
         const plan = plans.find((item) => item.key === row.planKey);
         return <div className="receivable-plan-cell">
           <Select aria-label={`关联回款计划 ${row.rowKey}`} placeholder="请选择" value={row.planKey} disabled={!customer} options={plans.filter((item) => item.customer === customer && !detailRows.some((other) => other.rowKey !== row.rowKey && other.planKey === item.key)).map((item) => ({ value: item.key, label: item.no }))} onChange={(value) => setAllocationPlan(row.rowKey, value)} />
-          {plan && <div className="receivable-plan-period-action"><span>{plan.installments.length}期</span><Button type="link" size="small" onClick={() => openAllocationModal(row.rowKey, plan.key)}>期次分摊</Button></div>}
+          {plan && periodAllocationEnabled && <div className="receivable-plan-period-action"><span>{plan.installments.length}期</span><Button type="link" size="small" onClick={() => openAllocationModal(row.rowKey, plan.key)}>期次分摊</Button></div>}
         </div>;
       } },
       { title: '回款计划未回金额', width: 180, render: (_, row) => {
@@ -311,28 +353,99 @@ export function ReceivablesWorkspace() {
       {allocationModalPlan && <Table rowKey="key" className="receivable-allocation-modal-table" size="small" bordered tableLayout="fixed" columns={allocationModalColumns} dataSource={allocationModalPlan.installments} pagination={false} scroll={{ x: 700 }} />}
     </Modal>
 
-    <Drawer className="receivable-detail-drawer" title={detailReceipt ? detailReceipt.no : ''} size={Math.min(1040, Math.max(360, window.innerWidth - 24))} open={Boolean(detailReceipt)} onClose={() => setDetailReceiptKey(undefined)} extra={detailReceipt && <Tag color={detailReceipt.status === '已通过' ? 'green' : detailReceipt.status === '待审批' ? 'gold' : 'default'}>{detailReceipt.status}</Tag>} footer={detailReceipt?.status === '待审批' ? <div className="receivable-drawer-footer"><Button onClick={() => changeReceiptStatus('已驳回')}>模拟审批驳回</Button><Button type="primary" onClick={() => changeReceiptStatus('已通过')}>模拟审批通过</Button></div> : null}>
+    <Drawer
+      className="receivable-detail-drawer receivable-detail-page"
+      title={detailReceipt && <div className="receivable-detail-header">
+        <div className="receivable-detail-header-main">
+          <strong>{detailReceipt.no}</strong>
+          <Space size={2} className="receivable-detail-actions">
+            <Button type="text" title="编辑" aria-label="编辑回款" icon={<EditOutlined />} onClick={() => message.info('编辑回款')} />
+            <Button type="text" title="打印" aria-label="打印回款" icon={<PrinterOutlined />} onClick={() => window.print()} />
+            <Button type="text" title="下载" aria-label="下载回款" icon={<DownloadOutlined />} onClick={() => message.info('下载回款详情')} />
+            <Button type="text" title="删除" aria-label="删除回款" icon={<DeleteOutlined />} onClick={() => message.info('删除回款')} />
+            <Button type="text" title="全屏" aria-label="全屏查看" icon={<FullscreenOutlined />} onClick={() => message.info('全屏查看')} />
+            <Button type="text" title="复制链接" aria-label="复制回款链接" icon={<CopyOutlined />} onClick={() => { void navigator.clipboard?.writeText(detailReceipt.no); message.success('已复制回款编号'); }} />
+            <Button type="text" title="关闭" aria-label="关闭回款详情" icon={<CloseOutlined />} onClick={() => setDetailReceiptKey(undefined)} />
+            <Button type="link" className="receivable-detail-followup" onClick={() => message.info('写跟进')}>写跟进 »</Button>
+          </Space>
+        </div>
+        <div className="receivable-detail-header-meta">
+          <span><em>关联客户：</em><LinkOutlined />{detailReceipt.customer}</span>
+          <span><em>回款日期：</em>{detailReceipt.date}</span>
+          <span><em>负责人：</em>{detailReceipt.owner}（Alice）</span>
+        </div>
+      </div>}
+      size={Math.max(360, window.innerWidth - (window.innerWidth > 760 ? 130 : 24))}
+      open={Boolean(detailReceipt)}
+      closable={false}
+      onClose={() => setDetailReceiptKey(undefined)}
+      footer={detailReceipt && <div className="receivable-detail-footer">
+        <Space className="receivable-detail-footer-actions">
+          <Button type="text" icon={<BellOutlined />} onClick={() => message.info('提醒设置')}>设置提醒</Button>
+          <Button type="text" icon={<CopyOutlined />} onClick={() => {
+            const planKeys = [...new Set(detailReceipt.allocations.map((allocation) => getPlanForPeriod(plans, allocation.installmentKey)?.key).filter((key): key is string => Boolean(key)))];
+            setDetailReceiptKey(undefined);
+            setCustomer(detailReceipt.customer);
+            setReceiptDate(dayjs(detailReceipt.date));
+            setReceiptType(detailReceipt.type);
+            setDetailRows(planKeys.map((planKey, index) => ({ rowKey: `copy-detail-${Date.now()}-${index}`, planKey })));
+            setManualAllocations(Object.fromEntries(detailReceipt.allocations.map((allocation) => [allocation.installmentKey, allocation.amount])));
+            setCreateOpen(true);
+          }}>复制并新建</Button>
+          {detailReceipt.status === '待审批' && <><Button onClick={() => changeReceiptStatus('已驳回')}>模拟审批驳回</Button><Button type="primary" onClick={() => changeReceiptStatus('已通过')}>模拟审批通过</Button></>}
+        </Space>
+        <Space className="receivable-detail-footer-navigation">
+          <Button onClick={() => setDetailReceiptKey(undefined)}>关闭</Button>
+          <Button aria-label="上一条回款" icon={<LeftOutlined />} disabled={visibleReceipts.findIndex((receipt) => receipt.key === detailReceipt.key) <= 0} onClick={() => { const index = visibleReceipts.findIndex((receipt) => receipt.key === detailReceipt.key); if (index > 0) setDetailReceiptKey(visibleReceipts[index - 1].key); }} />
+          <Button aria-label="下一条回款" icon={<RightOutlined />} disabled={visibleReceipts.findIndex((receipt) => receipt.key === detailReceipt.key) >= visibleReceipts.length - 1} onClick={() => { const index = visibleReceipts.findIndex((receipt) => receipt.key === detailReceipt.key); if (index < visibleReceipts.length - 1) setDetailReceiptKey(visibleReceipts[index + 1].key); }} />
+        </Space>
+      </div>}
+    >
       {detailReceipt && <>
-        {detailReceipt.status === '待审批' && <Alert className="receivable-detail-alert" type="warning" showIcon message="审批通过后，该回款单金额才会计入对应期次的已回款金额。" />}
-        <div className="receivable-detail-summary"><div><span>关联客户</span><strong>{detailReceipt.customer}</strong></div><div><span>回款日期</span><strong>{detailReceipt.date}</strong></div><div><span>回款类型</span><strong>{detailReceipt.type}</strong></div><div><span>负责人</span><strong>{detailReceipt.owner}</strong></div><div><span>本次回款总额</span><strong>{money(detailReceipt.allocations.reduce((sum, allocation) => sum + allocation.amount, 0))}</strong></div></div>
-        {Boolean(detailReceipt.orderKeys?.length) && <>
-          <div className="receivable-form-section-title receivable-detail-section-title"><strong>关联订单</strong></div>
-          <Table rowKey="key" className="receivable-detail-order-table" size="small" pagination={false} dataSource={detailReceipt.orderKeys?.flatMap((key) => { const order = ordersSeed.find((item) => item.key === key); return order ? [order] : []; })} columns={[
-            { title: '订单编号', dataIndex: 'no', ellipsis: true },
-            { title: '订单总额', dataIndex: 'total', render: money },
-            { title: '负责人', dataIndex: 'owner' },
-          ]} />
-        </>}
-        <div className="receivable-form-section-title receivable-detail-section-title"><strong>回款分摊明细</strong></div>
-        <Table rowKey="installmentKey" size="small" pagination={false} scroll={{ x: 800 }} dataSource={detailReceipt.allocations} columns={[
-          { title: '回款计划编号', width: 190, render: (_, row) => getPlanForPeriod(plans, row.installmentKey)?.no },
-          { title: '期次', width: 100, render: (_, row) => `第 ${getPeriod(plans, row.installmentKey)?.period} 期` },
-          { title: '本次回款金额', dataIndex: 'amount', width: 150, render: money },
-          { title: '该期已审批回款', width: 150, render: (_, row) => money(amounts[row.installmentKey]?.approved ?? 0) },
-          { title: '期次计划金额', width: 150, render: (_, row) => money(getPeriod(plans, row.installmentKey)?.planned ?? 0) },
-        ]} />
+        <Tabs activeKey={detailTab} onChange={setDetailTab} className="receivable-detail-tabs" items={[{ key: 'info', label: '回款信息' }, { key: 'activity', label: '回款动态' }]} />
+        {detailTab === 'info' ? <>
+          <div className="receivable-detail-section-heading">
+            <strong>基本信息</strong>
+            <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => setShowAllDetailFields((value) => !value)}>{showAllDetailFields ? '收起' : '显示全部'}</Button>
+          </div>
+          <div className="receivable-detail-info-grid">
+            {[
+              ['回款编号', detailReceipt.no], ['关联客户', <span className="receivable-detail-customer"><LinkOutlined />{detailReceipt.customer}</span>],
+              ['回款日期', detailReceipt.date], ['回款类型', detailReceipt.type || '-'],
+              ['负责人', `${detailReceipt.owner}（Alice）`], ['创建人', `${detailReceipt.owner}（Alice）`],
+              ['更新人', `${detailReceipt.owner}（Alice）`], ['创建时间', `${detailReceipt.date} 16:17:32`],
+              ['更新时间', `${detailReceipt.date} 16:17:32`, 'wide'],
+            ].map(([label, value, width]) => <div className={`receivable-detail-info-item${width === 'wide' ? ' is-wide' : ''}`} key={label as string}>
+              <span>{label}</span><strong>{value}</strong>
+            </div>)}
+          </div>
+
+          <div className="receivable-detail-section-heading receivable-detail-lines-heading">
+            <strong>回款明细</strong>
+            <Space.Compact size="small">
+              <Button type={detailLayout === 'table' ? 'default' : 'text'} onClick={() => setDetailLayout('table')}>表格</Button>
+              <Button type={detailLayout === 'list' ? 'default' : 'text'} onClick={() => setDetailLayout('list')}>列表</Button>
+            </Space.Compact>
+          </div>
+          {detailLayout === 'table' ? <Table rowKey="key" className="receivable-detail-lines-view" size="small" bordered tableLayout="fixed" pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `共${total}项` }} scroll={{ x: 1370 }} dataSource={receiptDetailRows} columns={receiptDetailColumns} /> :
+            <div className="receivable-detail-line-list">{receiptDetailRows.map((row) => <div key={row.key}>
+              <span>回款计划编号</span><strong>{row.planNo}</strong><span>期次</span><strong>第 {row.period} 期</strong><span>回款金额</span><strong>{money(row.amount)}</strong>
+              {periodAllocationEnabled && <Button type="link" onClick={() => setDetailAllocationPlanKey(getPlanForPeriod(plans, row.key)?.key)}>期次分摊</Button>}
+            </div>)}</div>}
+        </> : <div className="receivable-detail-activity">
+          <div><i /><span>{detailReceipt.date} 16:17:32</span><strong>{detailReceipt.owner}（Alice）创建了回款单</strong></div>
+          {detailReceipt.status !== '草稿' && <div><i /><span>{detailReceipt.date} 16:20:10</span><strong>回款单状态：{detailReceipt.status}</strong></div>}
+        </div>}
       </>}
     </Drawer>
+
+    <Modal title="期次分摊" open={Boolean(detailAllocationPlan)} onCancel={() => setDetailAllocationPlanKey(undefined)} footer={<Button type="primary" onClick={() => setDetailAllocationPlanKey(undefined)}>关闭</Button>}>
+      {detailReceipt && detailAllocationPlan && <Table rowKey="installmentKey" size="small" pagination={false} dataSource={detailReceipt.allocations.filter((allocation) => getPlanForPeriod(plans, allocation.installmentKey)?.key === detailAllocationPlan.key)} columns={[
+        { title: '期次', render: (_, row) => `第 ${getPeriod(plans, row.installmentKey)?.period} 期` },
+        { title: '计划金额', render: (_, row) => money(getPeriod(plans, row.installmentKey)?.planned ?? 0) },
+        { title: '本次回款分摊', dataIndex: 'amount', render: money },
+      ]} />}
+    </Modal>
 
     <Drawer className="receivable-detail-drawer" title={detailPlan ? `回款计划 ${detailPlan.no}` : ''} size={Math.min(1160, Math.max(360, window.innerWidth - 24))} open={Boolean(detailPlan)} onClose={() => setDetailPlanKey(undefined)}>
       {detailPlan && <>
