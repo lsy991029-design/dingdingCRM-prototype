@@ -1,22 +1,24 @@
-import { useEffect, useState } from 'react';
-import { Button, ConfigProvider, Empty, Input, Layout, Menu, Space, Typography } from 'antd';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { Button, ConfigProvider, Empty, Input, Layout, Menu, Space, Spin, Typography } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { CustomerWorkspace } from '../features/customers/components/CustomerWorkspace';
-import { CommunicationWorkspace } from '../features/communication/CommunicationWorkspace';
-import { FieldTrajectoryWorkspace } from '../features/field-trajectory/components/FieldTrajectoryWorkspace';
-import { OrdersWorkspace } from '../features/orders/OrdersWorkspace';
-import { ReceivablesWorkspace } from '../features/receivables/ReceivablesWorkspace';
-import { ReceivablesAdminWorkspace } from '../features/receivables-admin/ReceivablesAdminWorkspace';
-import { CloseLegacySystemModal, MigrationWorkspace } from '../features/migration/MigrationWorkspace';
 import { crmTheme } from './theme';
-import { StatisticsFieldsPrototype } from '../features/statistics-fields/StatisticsFieldsPrototype';
 import crmLogoUrl from '../assets/crm-logo.png';
-import goalManagementHtml from '../features/goal-management/legacy/GoalManagementEmbedded.html?raw';
 
 const { Header, Sider, Content } = Layout;
-const embeddedGoalManagementHtml = goalManagementHtml
-  .replace('<body>', '<body class="embedded-goal-management">')
-  .replace('</head>', '<style>.embedded-goal-management .topbar{display:none!important}</style></head>');
+const CustomerWorkspace = lazy(() => import('../features/customers/components/CustomerWorkspace').then((module) => ({ default: module.CustomerWorkspace })));
+const CommunicationWorkspace = lazy(() => import('../features/communication/CommunicationWorkspace').then((module) => ({ default: module.CommunicationWorkspace })));
+const FieldTrajectoryWorkspace = lazy(() => import('../features/field-trajectory/components/FieldTrajectoryWorkspace').then((module) => ({ default: module.FieldTrajectoryWorkspace })));
+const OrdersWorkspace = lazy(() => import('../features/orders/OrdersWorkspace').then((module) => ({ default: module.OrdersWorkspace })));
+const ReceivablesWorkspace = lazy(() => import('../features/receivables/ReceivablesWorkspace').then((module) => ({ default: module.ReceivablesWorkspace })));
+const ReceivablesAdminWorkspace = lazy(() => import('../features/receivables-admin/ReceivablesAdminWorkspace').then((module) => ({ default: module.ReceivablesAdminWorkspace })));
+const MigrationWorkspace = lazy(() => import('../features/migration/MigrationWorkspace').then((module) => ({ default: module.MigrationWorkspace })));
+const CloseLegacySystemModal = lazy(() => import('../features/migration/MigrationWorkspace').then((module) => ({ default: module.CloseLegacySystemModal })));
+const StatisticsFieldsPrototype = lazy(() => import('../features/statistics-fields/StatisticsFieldsPrototype').then((module) => ({ default: module.StatisticsFieldsPrototype })));
+const GoalManagementFrame = lazy(async () => {
+  const { default: html } = await import('../features/goal-management/legacy/GoalManagementEmbedded.html?raw');
+  const srcDoc = html.replace('<body>', '<body class="embedded-goal-management">').replace('</head>', '<style>.embedded-goal-management .topbar{display:none!important}</style></head>');
+  return { default: () => <iframe className="goal-management-frame" title="目标管理" srcDoc={srcDoc} /> };
+});
 
 export function App() {
   const [selectedModule, setSelectedModule] = useState(() => {
@@ -83,25 +85,27 @@ export function App() {
           <Button type="text" className={isManagementWorkspace ? 'sf-admin-entry' : undefined} onClick={() => { setTopLevel('sales'); setSelectedModule('statistics-fields'); }}>管理后台</Button>
         </Space>
       </Header>
-      {topLevel === 'applications' ? <Content className="crm-content application-content legacy-goal-content"><iframe className="goal-management-frame" title="目标管理" srcDoc={embeddedGoalManagementHtml} /></Content> :
+      {topLevel === 'applications' ? <Content className="crm-content application-content legacy-goal-content"><Suspense fallback={<div className="module-loading"><Spin size="large" /></div>}><GoalManagementFrame /></Suspense></Content> :
         <Layout>
           <Sider width={156} className="crm-sider">
             <Input className="sider-search" placeholder="请搜索" />
             <Menu mode="inline" selectedKeys={[selectedModule]} onClick={({ key }) => setSelectedModule(key)} items={isManagementWorkspace ? managementMenu : salesMenu} />
           </Sider>
           <Content className={isFieldTrajectory ? 'crm-content crm-content-field' : 'crm-content'}>
-            {selectedModule === 'statistics-fields' ? <StatisticsFieldsPrototype /> :
-              selectedModule === 'receivables-admin' ? <ReceivablesAdminWorkspace periodAllocationEnabled={periodAllocationEnabled} onPeriodAllocationChange={setPeriodAllocationEnabled} /> :
-              selectedModule === 'customers' ? <CustomerWorkspace /> :
-              selectedModule === 'communication' ? <CommunicationWorkspace /> :
-              selectedModule === 'field-trajectory' ? <FieldTrajectoryWorkspace /> :
-              selectedModule === 'orders' ? <OrdersWorkspace /> :
-              selectedModule === 'receivable' ? <ReceivablesWorkspace periodAllocationEnabled={periodAllocationEnabled} /> :
-              selectedModule === 'migration' ? <MigrationWorkspace onOpenCloseLegacy={(enterprise) => { setCloseLegacyEnterprise(enterprise?.name ?? '星河科技'); setCloseLegacyOpen(true); }} /> :
-              <div className="crm-surface module-empty"><Empty description="功能演示范围仅含客户模块、沟通录入、订单、回款和外勤轨迹" /><Typography.Text type="secondary">可通过左侧菜单进入可交互的演示模块。</Typography.Text></div>}
+            <Suspense fallback={<div className="module-loading"><Spin size="large" /></div>}>
+              {selectedModule === 'statistics-fields' ? <StatisticsFieldsPrototype /> :
+                selectedModule === 'receivables-admin' ? <ReceivablesAdminWorkspace periodAllocationEnabled={periodAllocationEnabled} onPeriodAllocationChange={setPeriodAllocationEnabled} /> :
+                selectedModule === 'customers' ? <CustomerWorkspace /> :
+                selectedModule === 'communication' ? <CommunicationWorkspace /> :
+                selectedModule === 'field-trajectory' ? <FieldTrajectoryWorkspace /> :
+                selectedModule === 'orders' ? <OrdersWorkspace /> :
+                selectedModule === 'receivable' ? <ReceivablesWorkspace periodAllocationEnabled={periodAllocationEnabled} /> :
+                selectedModule === 'migration' ? <MigrationWorkspace onOpenCloseLegacy={(enterprise) => { setCloseLegacyEnterprise(enterprise?.name ?? '星河科技'); setCloseLegacyOpen(true); }} /> :
+                <div className="crm-surface module-empty"><Empty description="功能演示范围仅含客户模块、沟通录入、订单、回款和外勤轨迹" /><Typography.Text type="secondary">可通过左侧菜单进入可交互的演示模块。</Typography.Text></div>}
+            </Suspense>
           </Content>
         </Layout>}
     </Layout>
-    <CloseLegacySystemModal open={closeLegacyOpen} enterpriseName={closeLegacyEnterprise} onCancel={() => setCloseLegacyOpen(false)} onSuccess={() => setCloseLegacyOpen(false)} />
+    {closeLegacyOpen && <Suspense fallback={null}><CloseLegacySystemModal open={closeLegacyOpen} enterpriseName={closeLegacyEnterprise} onCancel={() => setCloseLegacyOpen(false)} onSuccess={() => setCloseLegacyOpen(false)} /></Suspense>}
   </ConfigProvider>;
 }

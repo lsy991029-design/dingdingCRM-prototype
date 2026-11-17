@@ -415,6 +415,7 @@ body { margin: 0; min-width: 320px; background: #f5f7fa; }
 .follow-item p { margin: 6px 0 0; color: #333; line-height: 22px; }
 .column-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .module-empty { padding: 90px 24px; text-align: center; }
+.module-loading { display: grid; min-height: min(65vh, 560px); place-items: center; color: #667085; }
 
 .application-content { max-width: 1480px; width: 100%; margin: 0 auto; padding: 28px 32px 48px; }
 .legacy-goal-content { max-width: none; margin: 0; padding: 0; height: calc(100vh - 52px); overflow: hidden; }
